@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>F1 Calendar — OpenF1 + Ergast</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 18px; color:#111 }
+    header { margin-bottom: 16px }
+    input, select, button { padding:8px; margin-right:8px }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px }
+    th, td { padding:8px; border:1px solid #ddd; text-align:left; vertical-align:top }
+    th { background:#f3f3f3 }
+    .small { font-size:0.9em; color:#444 }
+    .muted { color:#666; font-size:0.9em }
+    .actions { margin-top:12px }
+    pre { background:#f7f7f8; padding:12px; border-radius:6px; overflow:auto; max-height:40vh }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>F1 Calendar Explorer</h1>
+    <p class="muted">Calendário completo por temporada (dados: Ergast; OpenF1 quando disponível).</p>
+  </header>
+
+  <div>
+    <label for="year"><strong>Ano / Season:</strong></label>
+    <select id="year"></select>
+    <button id="load">Carregar calendário</button>
+    <button id="current">Calendário atual</button>
+    <div class="actions">
+      <button id="exportJson">Exportar JSON</button>
+      <span id="status" class="small"></span>
+    </div>
+  </div>
+
+  <div id="content">
+    <table id="racesTable" style="display:none">
+      <thead>
+        <tr>
+          <th>Round</th>
+          <th>Nome da corrida</th>
+          <th>Data (local)</th>
+          <th>Circuito / Local</th>
+          <th>Coordenadas</th>
+          <th>Mais</th>
+        </tr>
+      </thead>
+      <tbody id="racesBody"></tbody>
+    </table>
+
+    <pre id="raw" style="display:none"></pre>
+  </div>
+
+  <script>
+    const yearSel = document.getElementById("year");
+    const loadBtn = document.getElementById("load");
+    const currentBtn = document.getElementById("current");
+    const status = document.getElementById("status");
+    const table = document.getElementById("racesTable");
+    const body = document.getElementById("racesBody");
+    const raw = document.getElementById("raw");
+    const exportBtn = document.getElementById("exportJson");
+
+    // popular select com últimos 30 anos + "current"
+    (function populateYears() {
+      const currentYear = new Date().getFullYear();
+      const start = currentYear - 30;
+      const frag = document.createDocumentFragment();
+      const optCurrent = document.createElement("option");
+      optCurrent.value = "current";
+      optCurrent.textContent = "current (temporada atual)";
+      frag.appendChild(optCurrent);
+      for (let y = currentYear; y >= start; y--) {
+        const o = document.createElement("option");
+        o.value = String(y);
+        o.textContent = String(y);
+        frag.appendChild(o);
+      }
+      yearSel.appendChild(frag);
+      yearSel.value = "current";
+    })();
+
+    async function loadCalendar(year) {
+      status.textContent = "Buscando...";
+      table.style.display = "none";
+      raw.style.display = "none";
+      body.innerHTML = "";
+      try {
+        const resp = await fetch(`/api/calendar/${encodeURIComponent(year)}`);
+        if (!resp.ok) {
+          const txt = await resp.text();
+          status.textContent = `Erro ${resp.status}: ${txt}`;
+          return;
+        }
+        const { calendar, openf1Data } = await resp.json();
+        status.textContent = `Carregado: season=${calendar.requestedYear} · provas=${calendar.races.length}`;
+        // popular tabela
+        calendar.races.forEach(r => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${r.round}</td>
+            <td><strong>${r.raceName}</strong><div class="small">season: ${r.season}</div></td>
+            <td>${r.date}${r.time ? " " + r.time : ""}</td>
+            <td>
+              ${r.circuit.circuitName || ""} <div class="small">${r.circuit.location.locality || ""}, ${r.circuit.location.country || ""}</div>
+              ${r.circuit.url ? `<div class="small"><a href="${r.circuit.url}" target="_blank">site circuito</a></div>` : ""}
+            </td>
+            <td>${r.circuit.location.lat || "-"} , ${r.circuit.location.long || "-"}</td>
+            <td>
+              <div class="small">URL: ${r.url || "-"}</div>
+              <div class="small">Sessions: ${r.sessions ? JSON.stringify(r.sessions) : "-"}</div>
+            </td>
+          `;
+          body.appendChild(tr);
+        });
+        table.style.display = "";
+        raw.style.display = "none";
+
+        // tornar JSON disponível para export
+        raw.textContent = JSON.stringify({ calendar, openf1Data }, null, 2);
+        exportBtn.onclick = () => {
+          const blob = new Blob([raw.textContent], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `f1_calendar_${calendar.requestedYear}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+      } catch (err) {
+        status.textContent = "Erro local: " + err;
+      }
+    }
+
+    loadBtn.addEventListener("click", () => loadCalendar(yearSel.value));
+    currentBtn.addEventListener("click", () => loadCalendar("current"));
+
+    // carregar ao abrir
+    loadCalendar("current");
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+
+{
+  "name": "f1-site",
+  "version": "1.0.0",
+  "description": "Proxy + frontend para OpenF1 e Ergast APIs (calendário de corridas)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^3.4.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "morgan": "^1.10.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
