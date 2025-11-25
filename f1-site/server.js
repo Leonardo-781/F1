@@ -10,6 +10,33 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Constants
+const OPENF1_MIN_YEAR = 2023; // OpenF1 API only has data from 2023 onwards
+const F1_MIN_YEAR = 1950; // First F1 season
+const F1_MAX_YEAR = new Date().getFullYear() + 1; // Allow next year for upcoming season
+
+/**
+ * Validates the year parameter
+ * @param {string} year - Year string to validate
+ * @returns {object} - { valid: boolean, error?: string }
+ */
+function validateYear(year) {
+  if (year === 'current') {
+    return { valid: true };
+  }
+  
+  const yearNum = parseInt(year, 10);
+  if (isNaN(yearNum) || !/^\d{4}$/.test(year)) {
+    return { valid: false, error: 'Ano inválido. Use um ano de 4 dígitos ou "current".' };
+  }
+  
+  if (yearNum < F1_MIN_YEAR || yearNum > F1_MAX_YEAR) {
+    return { valid: false, error: `Ano deve estar entre ${F1_MIN_YEAR} e ${F1_MAX_YEAR}.` };
+  }
+  
+  return { valid: true };
+}
+
 // Middleware
 app.use(cors());
 app.use(morgan('dev'));
@@ -26,6 +53,11 @@ app.use(express.static(join(__dirname, 'public')));
  */
 app.get('/api/calendar/:year', async (req, res) => {
   const { year } = req.params;
+  
+  const validation = validateYear(year);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
   
   try {
     // Buscar dados da Ergast API (gratuita, histórico completo)
@@ -81,7 +113,7 @@ app.get('/api/calendar/:year', async (req, res) => {
     const currentYear = new Date().getFullYear();
     const requestedYear = year === 'current' ? currentYear : parseInt(year, 10);
     
-    if (requestedYear >= 2023) {
+    if (requestedYear >= OPENF1_MIN_YEAR) {
       try {
         const openf1Url = `https://api.openf1.org/v1/meetings?year=${requestedYear}`;
         const openf1Response = await fetch(openf1Url, {
@@ -106,7 +138,7 @@ app.get('/api/calendar/:year', async (req, res) => {
       openf1Data,
       sources: {
         ergast: ergastUrl,
-        openf1: requestedYear >= 2023 ? `https://api.openf1.org/v1/meetings?year=${requestedYear}` : null
+        openf1: requestedYear >= OPENF1_MIN_YEAR ? `https://api.openf1.org/v1/meetings?year=${requestedYear}` : null
       }
     });
     
@@ -125,6 +157,11 @@ app.get('/api/calendar/:year', async (req, res) => {
  */
 app.get('/api/drivers/:year', async (req, res) => {
   const { year } = req.params;
+  
+  const validation = validateYear(year);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
   
   try {
     const ergastUrl = `https://ergast.com/api/f1/${encodeURIComponent(year)}/drivers.json`;
@@ -171,6 +208,11 @@ app.get('/api/drivers/:year', async (req, res) => {
 app.get('/api/constructors/:year', async (req, res) => {
   const { year } = req.params;
   
+  const validation = validateYear(year);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+  
   try {
     const ergastUrl = `https://ergast.com/api/f1/${encodeURIComponent(year)}/constructors.json`;
     const response = await fetch(ergastUrl);
@@ -212,6 +254,11 @@ app.get('/api/constructors/:year', async (req, res) => {
 app.get('/api/standings/drivers/:year', async (req, res) => {
   const { year } = req.params;
   
+  const validation = validateYear(year);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+  
   try {
     const ergastUrl = `https://ergast.com/api/f1/${encodeURIComponent(year)}/driverStandings.json`;
     const response = await fetch(ergastUrl);
@@ -224,13 +271,15 @@ app.get('/api/standings/drivers/:year', async (req, res) => {
     }
     
     const data = await response.json();
-    const standingsList = data.MRData.StandingsTable.StandingsLists[0];
+    const standingsLists = data.MRData?.StandingsTable?.StandingsLists;
     
-    if (!standingsList) {
+    if (!standingsLists || standingsLists.length === 0) {
       return res.status(404).json({
         error: 'Classificação não disponível para este ano'
       });
     }
+    
+    const standingsList = standingsLists[0];
     
     res.json({
       season: standingsList.season,
@@ -270,6 +319,11 @@ app.get('/api/standings/drivers/:year', async (req, res) => {
 app.get('/api/standings/constructors/:year', async (req, res) => {
   const { year } = req.params;
   
+  const validation = validateYear(year);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+  
   try {
     const ergastUrl = `https://ergast.com/api/f1/${encodeURIComponent(year)}/constructorStandings.json`;
     const response = await fetch(ergastUrl);
@@ -282,13 +336,15 @@ app.get('/api/standings/constructors/:year', async (req, res) => {
     }
     
     const data = await response.json();
-    const standingsList = data.MRData.StandingsTable.StandingsLists[0];
+    const standingsLists = data.MRData?.StandingsTable?.StandingsLists;
     
-    if (!standingsList) {
+    if (!standingsLists || standingsLists.length === 0) {
       return res.status(404).json({
         error: 'Classificação não disponível para este ano'
       });
     }
+    
+    const standingsList = standingsLists[0];
     
     res.json({
       season: standingsList.season,
